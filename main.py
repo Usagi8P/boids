@@ -12,16 +12,16 @@ class Boid(pygame.sprite.Sprite):
         self.y_loc: float = y_loc
         self.radius: float = radius
         self.speed: float = speed
-        self.max_perception: float = 20
-        self.alignment_force_multiplier: float = 0.6
-        self.cohesion_force_multiplier: float = 0.6
-        self.separation_force_multiplier: float = 0.8
+        self.max_perception: float = 40
+        self.alignment_force_multiplier: float = 0.4
+        self.cohesion_force_multiplier: float = 0.3
+        self.separation_force_multiplier: float = 0.4
         self.window_x = window_x
         self.window_y = window_y
         self.x_destination, self.y_destination = self.select_first_destionation(window_x,window_y)
         self.x_velocity, self.y_velocity = self.select_first_velocity()
-        self.x_desired_velocity = self.x_velocity
-        self.y_desired_velocity = self.y_velocity
+        self.x_acceleration: float = 0.0
+        self.y_acceleration: float = 0.0
         self.image = pygame.Surface((radius*2, radius*2), flags=pygame.SRCALPHA)
         self.color = color
         pygame.draw.circle(self.image, self.color, (radius,radius), radius)
@@ -52,19 +52,31 @@ class Boid(pygame.sprite.Sprite):
         x_separation_force, y_separation_force = self.separation(sprite_group)
         edge_check = self.check_edge(edges)
         if edge_check:
-            self.x_desired_velocity = self.x_desired_velocity * self.speed
-            self.y_desired_velocity = self.y_desired_velocity * self.speed
+            self.x_acceleration = self.x_acceleration
+            self.y_acceleration = self.y_acceleration
         if not edge_check:
-            self.x_desired_velocity = (self.x_desired_velocity + x_alignment_force + x_cohesion_force + x_separation_force)
-            self.y_desired_velocity = (self.y_desired_velocity + y_alignment_force + y_cohesion_force + y_separation_force)
+            self.x_acceleration = (x_alignment_force + x_cohesion_force + x_separation_force)
+            self.y_acceleration = (y_alignment_force + y_cohesion_force + y_separation_force)
         edge_check = False
-        self.x_desired_velocity, self.y_desired_velocity = self.calculate_magnitude(self.x_desired_velocity, self.y_desired_velocity)
+        # self.x_acceleration, self.y_acceleration = self.calculate_magnitude(self.x_acceleration, self.y_acceleration)
 
-    def move(self):
-        self.x_velocity = self.x_desired_velocity
-        self.y_velocity = self.y_desired_velocity
-        self.x_loc = self.x_velocity * self.speed + self.x_loc
-        self.y_loc = self.y_velocity * self.speed + self.y_loc
+    def move(self, same_speed: bool):
+        self.x_velocity = self.x_acceleration + self.x_velocity
+        self.y_velocity = self.y_acceleration + self.y_velocity
+        magnitude = self.magnitude_adjustment(self.x_velocity, self.y_velocity)
+        if same_speed is True:
+            if magnitude >= self.speed + 2:
+                self.x_velocity, self.y_velocity = self.calculate_magnitude(self.x_velocity, self.y_velocity) # Possibly limit velocity
+                self.x_velocity = self.x_velocity * (self.speed+2)
+                self.y_velocity = self.y_velocity * (self.speed+2)
+        if same_speed is not True:
+            self.x_velocity, self.y_velocity = self.calculate_magnitude(self.x_velocity, self.y_velocity) # Possibly limit velocity
+            self.x_velocity = self.x_velocity * self.speed
+            self.y_velocity = self.y_velocity * self.speed
+        self.x_loc = self.x_velocity + self.x_loc
+        self.y_loc = self.y_velocity + self.y_loc
+        self.x_acceleration = 0
+        self.y_acceleration = 0
 
     def check_edge(self, edges=False) -> bool:
         if edges is False:
@@ -80,22 +92,21 @@ class Boid(pygame.sprite.Sprite):
             avoid_distance = 40
             turn_speed = 0.05
             if self.x_loc >= self.window_x-self.radius*2 - avoid_distance:
-                self.x_desired_velocity = self.x_desired_velocity - turn_speed
+                self.x_acceleration = self.x_acceleration - turn_speed
                 return True
             if self.x_loc <= 0 + avoid_distance:
-                self.x_desired_velocity = self.x_desired_velocity + turn_speed
+                self.x_acceleration = self.x_acceleration + turn_speed
                 return True
             if self.y_loc >= self.window_y-self.radius*2 - avoid_distance:
-                self.y_desired_velocity = self.y_desired_velocity - turn_speed
+                self.y_acceleration = self.y_acceleration - turn_speed
                 return True
             if self.y_loc <= 0 + avoid_distance:
-                self.y_desired_velocity = self.y_desired_velocity + turn_speed
+                self.y_acceleration = self.y_acceleration + turn_speed
                 return True
         return False
 
     def calculate_magnitude(self,x_adjust, y_adjust) -> tuple[float, float]: 
-        movement_magnitude: float = sqrt((self.x_loc-self.x_loc+x_adjust)**2+(self.y_loc-self.y_loc+y_adjust)**2)
-        movement_magnitude = self.magnitude_adjustment(movement_magnitude)
+        movement_magnitude = self.magnitude_adjustment(x_adjust, y_adjust)
         if movement_magnitude > 0.0:
             x_velocity: float = (self.x_loc-self.x_loc+x_adjust) / movement_magnitude
             y_velocity: float = (self.y_loc-self.y_loc+y_adjust) / movement_magnitude
@@ -104,8 +115,9 @@ class Boid(pygame.sprite.Sprite):
             y_velocity = 0.0
         return x_velocity, y_velocity
 
-    def magnitude_adjustment(self, movement_magnitude: float) -> float:
-        minimum_magnitude = 0.05
+    def magnitude_adjustment(self, x_adjust, y_adjust) -> float:
+        movement_magnitude: float = sqrt((self.x_loc-self.x_loc+x_adjust)**2+(self.y_loc-self.y_loc+y_adjust)**2)
+        minimum_magnitude = 0.01
         if movement_magnitude < minimum_magnitude:
             return 0.0
         return movement_magnitude
@@ -175,8 +187,8 @@ class Boid(pygame.sprite.Sprite):
             if sprite is not self:
                 distance = sqrt((self.x_loc - sprite.x_loc)**2 + (self.y_loc - sprite.y_loc)**2)
                 if distance <= self.max_perception and distance > 0:
-                    x_individual_separation = (self.x_loc - sprite.x_loc) / (distance)
-                    y_individual_separation = (self.y_loc - sprite.y_loc) / (distance)
+                    x_individual_separation = (self.x_loc - sprite.x_loc) / (distance*distance)
+                    y_individual_separation = (self.y_loc - sprite.y_loc) / (distance*distance)
                     x_separation_forces.append(x_individual_separation)
                     y_separation_forces.append(y_individual_separation)
                 if distance == 0:
@@ -189,7 +201,7 @@ class Boid(pygame.sprite.Sprite):
         x_separation_force: float = sum(x_separation_forces)/len(x_separation_forces)
         y_separation_force: float = sum(y_separation_forces)/len(y_separation_forces)
 
-        # x_separation_force, y_separation_force = self.calculate_magnitude(x_separation_force, y_separation_force)
+        x_separation_force, y_separation_force = self.calculate_magnitude(x_separation_force, y_separation_force)
 
         x_separation_force = x_separation_force * self.separation_force_multiplier
         y_separation_force = y_separation_force * self.separation_force_multiplier
@@ -202,7 +214,9 @@ def main() -> None:
     window_width: int = 640
     frames_per_sec: int = 60
 
-    n_boids: int = 75
+    n_boids: int = 50
+    edges: bool = False
+    same_speed: bool = True
 
     frame_rate: pygame.time.Clock = pygame.time.Clock()
     screen = pygame.display.set_mode((window_width,window_height), pygame.SCALED)
@@ -231,10 +245,10 @@ def main() -> None:
 
         screen.fill((255,255,255))
         for element in all_boids:
-            element.calculate_velocity(all_boids, edges=True)
+            element.calculate_velocity(all_boids, edges=edges)
         
         for element in all_boids:
-            element.move()
+            element.move(same_speed)
             element.draw(screen)
         
         boid1_txt = font.render(f'Boid1: {round(boid1.x_loc,4)}, {round(boid1.y_loc,4)}',True,(0,0,0))

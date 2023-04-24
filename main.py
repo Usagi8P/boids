@@ -6,16 +6,18 @@ from math import sqrt
 pygame.init()
 
 class Boid(pygame.sprite.Sprite):
-    def __init__(self, x_loc, y_loc, window_x, window_y, radius = 3, speed = 2, color = (0,0,0)) -> None:
+    def __init__(self, x_loc: float, y_loc: float, window_x: int, window_y: int, max_perception: float = 40, 
+                 alignment_force: float = 0.2, cohesion_force: float = 0.4, separation_force: float = 0.5,
+                 radius: int = 3, speed: float = 3, color: tuple[int,int,int]= (0,0,0)) -> None:
         super().__init__()
         self.x_loc: float = x_loc
         self.y_loc: float = y_loc
         self.radius: float = radius
         self.speed: float = speed
-        self.max_perception: float = 40
-        self.alignment_force_multiplier: float = 0.4
-        self.cohesion_force_multiplier: float = 0.3
-        self.separation_force_multiplier: float = 0.4
+        self.max_perception: float = max_perception
+        self.alignment_force_multiplier: float = alignment_force
+        self.cohesion_force_multiplier: float = cohesion_force
+        self.separation_force_multiplier: float = separation_force
         self.window_x = window_x
         self.window_y = window_y
         self.x_destination, self.y_destination = self.select_first_destionation(window_x,window_y)
@@ -64,12 +66,12 @@ class Boid(pygame.sprite.Sprite):
         self.x_velocity = self.x_acceleration + self.x_velocity
         self.y_velocity = self.y_acceleration + self.y_velocity
         magnitude = self.magnitude_adjustment(self.x_velocity, self.y_velocity)
-        if same_speed is True:
+        if same_speed is False:
             if magnitude >= self.speed + 2:
                 self.x_velocity, self.y_velocity = self.calculate_magnitude(self.x_velocity, self.y_velocity) # Possibly limit velocity
                 self.x_velocity = self.x_velocity * (self.speed+2)
                 self.y_velocity = self.y_velocity * (self.speed+2)
-        if same_speed is not True:
+        if same_speed is True:
             self.x_velocity, self.y_velocity = self.calculate_magnitude(self.x_velocity, self.y_velocity) # Possibly limit velocity
             self.x_velocity = self.x_velocity * self.speed
             self.y_velocity = self.y_velocity * self.speed
@@ -192,7 +194,7 @@ class Boid(pygame.sprite.Sprite):
                     x_separation_forces.append(x_individual_separation)
                     y_separation_forces.append(y_individual_separation)
                 if distance == 0:
-                    x_separation_forces.append(self. max_perception)
+                    x_separation_forces.append(self.max_perception)
                     y_separation_forces.append(self.max_perception)
 
         if len(x_separation_forces) == 0:
@@ -221,10 +223,6 @@ def main() -> None:
     frame_rate: pygame.time.Clock = pygame.time.Clock()
     screen = pygame.display.set_mode((window_width,window_height), pygame.SCALED)
     pygame.display.set_caption("Boids")
-
-    boid1: Boid = Boid(window_height/2, window_width/3, window_width, window_height, color=(233,150,122))
-    boid2: Boid = Boid(window_height/2, window_width/2, window_width, window_height, color=(233,150,122))
-
     all_boids: pygame.sprite.Group = pygame.sprite.Group()
 
     if n_boids > 0:
@@ -233,8 +231,10 @@ def main() -> None:
             y_location = window_height * random.random()
             all_boids.add(Boid(x_location, y_location, window_width, window_height))
 
-    all_boids.add(boid1)
-    all_boids.add(boid2)
+    # boid1: Boid = Boid(window_height/2, window_width/3, window_width, window_height, color=(233,150,122))
+    # boid2: Boid = Boid(window_height/2, window_width/2, window_width, window_height, color=(233,150,122))
+    # all_boids.add(boid1)
+    # all_boids.add(boid2)
 
     font = pygame.font.Font('freesansbold.ttf',20)
 
@@ -251,10 +251,10 @@ def main() -> None:
             element.move(same_speed)
             element.draw(screen)
         
-        boid1_txt = font.render(f'Boid1: {round(boid1.x_loc,4)}, {round(boid1.y_loc,4)}',True,(0,0,0))
-        boid2_txt = font.render(f'Boid2: {round(boid2.x_velocity,4)}, {round(boid2.y_velocity,4)}',True,(0,0,0))
-        screen.blit(boid1_txt,(20,20))
-        screen.blit(boid2_txt,(20,40))
+        # boid1_txt = font.render(f'Boid1: {round(boid1.x_loc,4)}, {round(boid1.y_loc,4)}',True,(0,0,0))
+        # boid2_txt = font.render(f'Boid2: {round(boid2.x_velocity,4)}, {round(boid2.y_velocity,4)}',True,(0,0,0))
+        # screen.blit(boid1_txt,(20,20))
+        # screen.blit(boid2_txt,(20,40))
 
         pygame.display.flip()
         frame_rate.tick(frames_per_sec)

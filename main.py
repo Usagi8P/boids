@@ -1,263 +1,138 @@
 import pygame
 from pygame.locals import *
 import random
-from math import sqrt
-
-pygame.init()
-
-class Boid(pygame.sprite.Sprite):
-    def __init__(self, x_loc: float, y_loc: float, window_x: int, window_y: int, max_perception: float = 40, 
-                 alignment_force: float = 0.2, cohesion_force: float = 0.4, separation_force: float = 0.5,
-                 radius: int = 3, speed: float = 3, color: tuple[int,int,int]= (0,0,0)) -> None:
-        super().__init__()
-        self.x_loc: float = x_loc
-        self.y_loc: float = y_loc
-        self.radius: float = radius
-        self.speed: float = speed
-        self.max_perception: float = max_perception
-        self.alignment_force_multiplier: float = alignment_force
-        self.cohesion_force_multiplier: float = cohesion_force
-        self.separation_force_multiplier: float = separation_force
-        self.window_x = window_x
-        self.window_y = window_y
-        self.x_destination, self.y_destination = self.select_first_destionation(window_x,window_y)
-        self.x_velocity, self.y_velocity = self.select_first_velocity()
-        self.x_acceleration: float = 0.0
-        self.y_acceleration: float = 0.0
-        self.image = pygame.Surface((radius*2, radius*2), flags=pygame.SRCALPHA)
-        self.color = color
-        pygame.draw.circle(self.image, self.color, (radius,radius), radius)
-
-    def draw(self, surface):
-        surface.blit(self.image,(self.x_loc, self.y_loc))
-
-    def select_first_velocity(self) -> tuple[float,float]:
-        x_velocity = random.uniform(-1.0, 1.0)
-        y_velocity = random.uniform(-1.0, 1.0)
-        x_velocity, y_velocity = self.calculate_magnitude(x_velocity, y_velocity)
-        # print(x_velocity)
-        # print(y_velocity)
-        # print('___')
-        return x_velocity, y_velocity
-
-    def select_first_destionation(self, window_x, window_y) -> tuple[float,float]:
-        x_destination = window_x * random.random()
-        y_destination = window_y * random.random()
-        # print(x_destination)
-        # print(y_destination)
-        # print('___')
-        return x_destination, y_destination
-
-    def calculate_velocity(self, sprite_group, edges=False):
-        x_alignment_force, y_alignment_force = self.alignment(sprite_group)
-        x_cohesion_force, y_cohesion_force = self.cohesion(sprite_group)
-        x_separation_force, y_separation_force = self.separation(sprite_group)
-        edge_check = self.check_edge(edges)
-        if edge_check:
-            self.x_acceleration = self.x_acceleration
-            self.y_acceleration = self.y_acceleration
-        if not edge_check:
-            self.x_acceleration = (x_alignment_force + x_cohesion_force + x_separation_force)
-            self.y_acceleration = (y_alignment_force + y_cohesion_force + y_separation_force)
-        edge_check = False
-        # self.x_acceleration, self.y_acceleration = self.calculate_magnitude(self.x_acceleration, self.y_acceleration)
-
-    def move(self, same_speed: bool):
-        self.x_velocity = self.x_acceleration + self.x_velocity
-        self.y_velocity = self.y_acceleration + self.y_velocity
-        magnitude = self.magnitude_adjustment(self.x_velocity, self.y_velocity)
-        if same_speed is False:
-            if magnitude >= self.speed + 2:
-                self.x_velocity, self.y_velocity = self.calculate_magnitude(self.x_velocity, self.y_velocity) # Possibly limit velocity
-                self.x_velocity = self.x_velocity * (self.speed+2)
-                self.y_velocity = self.y_velocity * (self.speed+2)
-        if same_speed is True:
-            self.x_velocity, self.y_velocity = self.calculate_magnitude(self.x_velocity, self.y_velocity) # Possibly limit velocity
-            self.x_velocity = self.x_velocity * self.speed
-            self.y_velocity = self.y_velocity * self.speed
-        self.x_loc = self.x_velocity + self.x_loc
-        self.y_loc = self.y_velocity + self.y_loc
-        self.x_acceleration = 0
-        self.y_acceleration = 0
-
-    def check_edge(self, edges=False) -> bool:
-        if edges is False:
-            if self.x_loc > self.window_x:
-                self.x_loc = 0
-            if self.x_loc < 0:
-                self.x_loc = self.window_x
-            if self.y_loc > self.window_y:
-                self.y_loc = 0
-            if self.y_loc < 0:
-                self.y_loc = self.window_y
-        if edges is True:
-            avoid_distance = 40
-            turn_speed = 0.05
-            if self.x_loc >= self.window_x-self.radius*2 - avoid_distance:
-                self.x_acceleration = self.x_acceleration - turn_speed
-                return True
-            if self.x_loc <= 0 + avoid_distance:
-                self.x_acceleration = self.x_acceleration + turn_speed
-                return True
-            if self.y_loc >= self.window_y-self.radius*2 - avoid_distance:
-                self.y_acceleration = self.y_acceleration - turn_speed
-                return True
-            if self.y_loc <= 0 + avoid_distance:
-                self.y_acceleration = self.y_acceleration + turn_speed
-                return True
-        return False
-
-    def calculate_magnitude(self,x_adjust, y_adjust) -> tuple[float, float]: 
-        movement_magnitude = self.magnitude_adjustment(x_adjust, y_adjust)
-        if movement_magnitude > 0.0:
-            x_velocity: float = (self.x_loc-self.x_loc+x_adjust) / movement_magnitude
-            y_velocity: float = (self.y_loc-self.y_loc+y_adjust) / movement_magnitude
-        if movement_magnitude == 0.0:
-            x_velocity = 0.0
-            y_velocity = 0.0
-        return x_velocity, y_velocity
-
-    def magnitude_adjustment(self, x_adjust, y_adjust) -> float:
-        movement_magnitude: float = sqrt((self.x_loc-self.x_loc+x_adjust)**2+(self.y_loc-self.y_loc+y_adjust)**2)
-        minimum_magnitude = 0.01
-        if movement_magnitude < minimum_magnitude:
-            return 0.0
-        return movement_magnitude
-
-    def alignment(self, sprite_group) -> tuple[float,float]:
-        x_velocities: list[float] = []
-        y_velocities: list[float] = []
-        
-        for sprite in sprite_group:
-            if sprite is not self:
-                distance = sqrt((self.x_loc - sprite.x_loc)**2 + (self.y_loc - sprite.y_loc)**2)
-                if distance <= self.max_perception:
-                    x_velocities.append(sprite.x_velocity)
-                    y_velocities.append(sprite.y_velocity)
-
-
-        if len(x_velocities) == 0:
-            return 0.0, 0.0
-        
-        x_average_speed: float = sum(x_velocities)/len(x_velocities)
-        y_average_speed: float = sum(y_velocities)/len(y_velocities)
-
-        x_alignment_force = x_average_speed - self.x_velocity
-        y_alignment_force = y_average_speed - self.y_velocity
-
-        x_alignment_force, y_alignment_force = self.calculate_magnitude(x_alignment_force, y_alignment_force)
-
-        x_alignment_force = x_alignment_force * self.alignment_force_multiplier
-        y_alignment_force = y_alignment_force * self.alignment_force_multiplier
-
-        # print(x_alignment_force, " ", y_alignment_force)
-
-        return x_alignment_force, y_alignment_force  
-
-    def cohesion(self,sprite_group) -> tuple[float,float]:
-        x_locations: list[float] = []
-        y_locations: list[float] = []
-        
-        for sprite in sprite_group:
-            if sprite is not self:
-                distance = sqrt((self.x_loc - sprite.x_loc)**2 + (self.y_loc - sprite.y_loc)**2)
-                if distance <= self.max_perception:
-                    x_locations.append(sprite.x_loc)
-                    y_locations.append(sprite.y_loc)
-        
-        if len(x_locations) == 0:
-            return 0.0,0.0
-        
-        x_average_location: float = sum(x_locations)/len(x_locations)
-        y_average_location: float = sum(y_locations)/len(y_locations)
-
-        x_cohesion_force: float = x_average_location - self.x_loc
-        y_cohesion_force: float = y_average_location - self.y_loc
-
-        x_cohesion_force, y_cohesion_force = self.calculate_magnitude(x_cohesion_force, y_cohesion_force)
-
-        x_cohesion_force = x_cohesion_force * self.cohesion_force_multiplier
-        y_cohesion_force = y_cohesion_force * self.cohesion_force_multiplier
-
-        return x_cohesion_force, y_cohesion_force
-    
-    def separation(self, sprite_group) -> tuple[float,float]:
-        x_separation_forces: list[float] = []
-        y_separation_forces: list[float] = []
-
-        for sprite in sprite_group:
-            if sprite is not self:
-                distance = sqrt((self.x_loc - sprite.x_loc)**2 + (self.y_loc - sprite.y_loc)**2)
-                if distance <= self.max_perception and distance > 0:
-                    x_individual_separation = (self.x_loc - sprite.x_loc) / (distance*distance)
-                    y_individual_separation = (self.y_loc - sprite.y_loc) / (distance*distance)
-                    x_separation_forces.append(x_individual_separation)
-                    y_separation_forces.append(y_individual_separation)
-                if distance == 0:
-                    x_separation_forces.append(self.max_perception)
-                    y_separation_forces.append(self.max_perception)
-
-        if len(x_separation_forces) == 0:
-            return 0.0,0.0
-
-        x_separation_force: float = sum(x_separation_forces)/len(x_separation_forces)
-        y_separation_force: float = sum(y_separation_forces)/len(y_separation_forces)
-
-        x_separation_force, y_separation_force = self.calculate_magnitude(x_separation_force, y_separation_force)
-
-        x_separation_force = x_separation_force * self.separation_force_multiplier
-        y_separation_force = y_separation_force * self.separation_force_multiplier
-        
-        return x_separation_force, y_separation_force
+from boid import Boid
+from input_options import InputBox, Text, RadioButton, Button
 
 
 def main() -> None:
+    pygame.init()
+    
     window_height: int = 640
     window_width: int = 640
     frames_per_sec: int = 60
 
+    option_width: int = 320
+
     n_boids: int = 50
+    alignment_force: float = 0.2
+    cohesion_force: float = 0.4
+    separation_force: float = 0.5
     edges: bool = False
     same_speed: bool = True
 
     frame_rate: pygame.time.Clock = pygame.time.Clock()
-    screen = pygame.display.set_mode((window_width,window_height), pygame.SCALED)
+    screen = pygame.display.set_mode((window_width + option_width,window_height), pygame.SCALED)
     pygame.display.set_caption("Boids")
     all_boids: pygame.sprite.Group = pygame.sprite.Group()
+
+    boid_area = pygame.Surface((window_width, window_height))
+    option_area = pygame.Surface((option_width, window_height))
 
     if n_boids > 0:
         for _ in range(n_boids):
             x_location = window_width * random.random()
             y_location = window_height * random.random()
-            all_boids.add(Boid(x_location, y_location, window_width, window_height))
-
-    # boid1: Boid = Boid(window_height/2, window_width/3, window_width, window_height, color=(233,150,122))
-    # boid2: Boid = Boid(window_height/2, window_width/2, window_width, window_height, color=(233,150,122))
-    # all_boids.add(boid1)
-    # all_boids.add(boid2)
+            all_boids.add(Boid(x_location, y_location, window_width, window_height,
+                               alignment_force=alignment_force, cohesion_force=cohesion_force, separation_force=separation_force))
 
     font = pygame.font.Font('freesansbold.ttf',20)
+    alignment_text = Text('Alignment', option_area, pygame.Rect((50,100,200,32)), font)
+    alignment_input = InputBox(str(alignment_force), option_area, pygame.Rect((50,150,200,32)),font)
+    cohesion_text = Text('Cohesion', option_area, pygame.Rect((50,200,200,32)), font)
+    cohesion_input = InputBox(str(cohesion_force), option_area, pygame.Rect((50,250,200,32)),font)
+    separation_text = Text('Separation', option_area, pygame.Rect((50,300,200,32)), font)
+    separation_input = InputBox(str(separation_force), option_area, pygame.Rect((50,350,200,32)),font)
 
-    while True:
+    edges_text = Text('Avoid Edge of Screen', option_area, pygame.Rect(50,400,200,32), font)
+    edges_radio_button = RadioButton(edges, option_area, pygame.Rect(50,450,32,32))
+
+    reset_button = Button('Reset', option_area, pygame.Rect(50,500,200,32), font,
+                          'black', 'red')
+    quit_button = Button('Quit', option_area, pygame.Rect(50,550,200,32), font,
+                         'black', 'red')
+
+    game_loop = True
+    while game_loop:
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
 
-        screen.fill((255,255,255))
+            new_alignment_force = alignment_input.handle_event(event, (boid_area.get_width(),0))
+            if new_alignment_force is not None:
+                alignment_force = convert_to_float(new_alignment_force)
+                alignment_input.text = str(alignment_force)
+
+            new_cohesion_force = cohesion_input.handle_event(event, (boid_area.get_width(),0))
+            if new_cohesion_force is not None:
+                cohesion_force = convert_to_float(new_cohesion_force)
+                cohesion_input.text = str(cohesion_force)
+
+            new_separation_force = separation_input.handle_event(event, (boid_area.get_width(),0))
+            if new_separation_force is not None: 
+                separation_force = convert_to_float(new_separation_force)
+                separation_input.text = str(separation_force)
+
+            edge_radio_result = edges_radio_button.handle_event(event, (boid_area.get_width(),0))
+            if edge_radio_result is not None:
+                edges = edge_radio_result
+
+            reset_result = reset_button.handle_event(event, (boid_area.get_width(),0))
+            if reset_result:
+                main()
+
+            quit_result = quit_button.handle_event(event, (boid_area.get_width(),0))
+            if quit_result:
+                pygame.quit()
+
+            for element in all_boids:
+                element.cohesion_force_multiplier = cohesion_force
+                element.alignment_force_multiplier = alignment_force
+                element.separation_force_multiplier = separation_force
+                    
+
+        screen.fill('white')
+        boid_area.fill('white')
+        option_area.fill('white')
+                
         for element in all_boids:
             element.calculate_velocity(all_boids, edges=edges)
         
         for element in all_boids:
             element.move(same_speed)
-            element.draw(screen)
+            element.draw(boid_area)
         
-        # boid1_txt = font.render(f'Boid1: {round(boid1.x_loc,4)}, {round(boid1.y_loc,4)}',True,(0,0,0))
-        # boid2_txt = font.render(f'Boid2: {round(boid2.x_velocity,4)}, {round(boid2.y_velocity,4)}',True,(0,0,0))
-        # screen.blit(boid1_txt,(20,20))
-        # screen.blit(boid2_txt,(20,40))
+        alignment_text.draw()
+        alignment_input.draw()
 
+        cohesion_text.draw()
+        cohesion_input.draw()
+
+        separation_text.draw()
+        separation_input.draw()
+
+        edges_text.draw()
+        edges_radio_button.draw()
+
+        reset_button.draw()
+        quit_button.draw()
+
+        screen.blit(boid_area, (0,0))
+        screen.blit(option_area, (boid_area.get_width(), 0))
         pygame.display.flip()
         frame_rate.tick(frames_per_sec)
+
+
+def convert_to_float(string: str) -> float:
+    string = string
+    number = [character for i, character in enumerate(string) if character in '1234567890.' and (character != '.' or '.' not in string[:i])]
+    number = ''.join(number)
+    
+    if number == '':
+        return 0.0
+
+    number = float(number)
+    return number
 
 
 if __name__ == "__main__":
